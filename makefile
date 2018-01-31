@@ -1,6 +1,6 @@
 
 libev.sn: 
-	g++ -o libev.sn libev.cpp -lev
+	g++ -g -o libev.sn libev.cpp -lev
 
 
 .PHONY:clean
