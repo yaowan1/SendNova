@@ -15,17 +15,20 @@
 #include<sys/types.h>
 #include<string.h>
 #include<vector>
+#include<signal.h>
+#include"sn.h"
+
 using namespace std;
 #define PORT 10004
 #define BUFFER_SIZE 1024
 
-vector<int> g_vecPlayer;
 int playerArr[1024] = {};
 int total_clients = 0;
+sn g_sn;
+
 void accept_cb(struct ev_loop* loop,struct ev_io* watcher,int revents);
 void read_cb(struct ev_loop* loop,struct ev_io* watcher,int revents);
 
-#include<signal.h>
 typedef void (*signal_handler)(int);
 
 void signal_handler_fun(int v)
@@ -72,7 +75,7 @@ int main()
 	ev_io_init(&socket_accept,accept_cb,sd,EV_READ);
 	ev_io_start(loop,&socket_accept);
 
-
+	g_sn.init();
 	while(1)
 	{
 		ev_loop(loop,0);
@@ -84,7 +87,9 @@ int main()
 
 void accept_cb(struct ev_loop* loop,struct ev_io* watcher,int revents)
 {
-	//struct sockaddr_in client_addr;
+	struct sockaddr_in client_addr;
+	socklen_t client_len = sizeof(client_addr);
+
 	int client_sd;
 	struct ev_io* w_client = (struct ev_io*)malloc(sizeof(struct ev_io));
 	if(EV_ERROR & revents)
@@ -93,8 +98,10 @@ void accept_cb(struct ev_loop* loop,struct ev_io* watcher,int revents)
 		return;
 	}
 
-	//client_sd = accept(watcher->fd,(struct sockaddr*)&client_addr,&client_len );
+	client_sd = accept(watcher->fd,(struct sockaddr*)&client_addr,&client_len );
 	client_sd = accept(watcher->fd,NULL,NULL);
+	//getpeername(watcher->fd,(sockaddr*)&client_addr,&client_len);
+	char* pip = inet_ntoa(client_addr.sin_addr);
 	if(client_sd < 0)
 	{
 		printf("accept error\n");
@@ -104,18 +111,7 @@ void accept_cb(struct ev_loop* loop,struct ev_io* watcher,int revents)
 	
 	ev_io_init(w_client,read_cb,client_sd,EV_READ);
 	ev_io_start(loop,w_client);
-	int i = 0;
-	g_vecPlayer.push_back(client_sd);
-	/*
-	for(;i < 1024;++i)
-	{
-		if(playerArr[i] == 0)
-		{
-			playerArr[i] = client_sd;
-			break;
-		}
-	}
-	*/
+	g_sn.connect(client_sd,pip);
 	total_clients++;
 	printf("%d client connected.\n",total_clients);
 }
@@ -138,34 +134,13 @@ void read_cb(struct ev_loop* loop,struct ev_io* watcher,int revents)
 		free(watcher);
 		perror("peer might closing\n");
 
-		vector<int>::iterator it = g_vecPlayer.begin();
-		for(;it != g_vecPlayer.end();++it)
-		{
-			if(*it == watcher->fd)
-			{
-				g_vecPlayer.erase(it);
-
-				printf("%d client x.\n",--total_clients);
-				return;
-			}
-		}
+		g_sn.disconnect(watcher->fd);
 
 		return;
 	}
 	else if(read < 0)
 	{
-		
-		vector<int>::iterator it = g_vecPlayer.begin();
-		for(;it != g_vecPlayer.end();++it)
-		{
-			if(*it == watcher->fd)
-			{
-				g_vecPlayer.erase(it);
-
-				printf("%d client x.\n",--total_clients);
-				return;
-			}
-		}
+		g_sn.disconnect(watcher->fd);
 		printf("client close\n");
 		return;
 	}
@@ -175,11 +150,8 @@ void read_cb(struct ev_loop* loop,struct ev_io* watcher,int revents)
 		printf("readnum:%d msg:%s\n",read,buffer);
 	}
 
-	vector<int>::iterator it = g_vecPlayer.begin();
-	for(;it != g_vecPlayer.end();++it)
-	{
-		send(*it,buffer,read,0);
-	}
+	g_sn.recv_msg(-99,buffer,read,watcher->fd);
+
 
 	bzero(buffer,read);
 
