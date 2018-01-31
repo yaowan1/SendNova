@@ -7,7 +7,7 @@
 
 #include<stdio.h>
 #include<stdlib.h>
-#include<malloc.h>
+//#include<malloc.h>
 #include<ev.h>
 #include<netinet/in.h>
 #include<arpa/inet.h>
